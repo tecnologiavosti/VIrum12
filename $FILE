@@ -1,0 +1,3 @@
+-- This migration documentation reflects the new fields stored in the JSONB questionnaire column
+-- No schema changes required as diagnoses.questionnaire is JSONB.
+COMMENT ON COLUMN public.diagnoses.questionnaire IS 'Stores dynamic form answers. New fields added: profession_detail, work_environment, colors_avoided, fabrics_avoided.';

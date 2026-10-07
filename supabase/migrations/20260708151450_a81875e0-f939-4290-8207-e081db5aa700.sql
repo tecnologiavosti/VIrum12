@@ -1,0 +1,1 @@
+ALTER TABLE public.diagnoses ADD COLUMN IF NOT EXISTS dossier_content jsonb;

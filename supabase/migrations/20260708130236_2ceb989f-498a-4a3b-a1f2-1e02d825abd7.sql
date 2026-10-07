@@ -1,0 +1,1 @@
+DELETE FROM public.diagnostic_form_images WHERE category IN ('sapato','relogio');

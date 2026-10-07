@@ -1,0 +1,28 @@
+project_id = "mhvmjgyibehthmglnxge"
+
+[functions.migrate-sql]
+verify_jwt = false
+
+[functions.painel-migracao]
+verify_jwt = false
+
+[functions.audit-production-ai]
+verify_jwt = false
+
+[functions.process-diagnosis]
+verify_jwt = false
+
+[functions.audit-secrets-v2]
+verify_jwt = false
+
+[functions.production-test-groq]
+verify_jwt = false
+
+[functions.test-final-diagnosis]
+verify_jwt = false
+
+[functions.audit-runtime-secrets]
+verify_jwt = false
+
+[functions.audit-runtime-v3]
+verify_jwt = false

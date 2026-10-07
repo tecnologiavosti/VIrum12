@@ -1,0 +1,28 @@
+# VIRUM — robots.txt
+User-agent: *
+Allow: /
+Allow: /pricing
+Allow: /how-it-works
+Allow: /faq
+Allow: /blog
+Allow: /blog/
+Allow: /terms
+Allow: /privacy
+Allow: /cookies
+
+Disallow: /admin
+Disallow: /admin/
+Disallow: /dashboard
+Disallow: /account
+Disallow: /new-diagnosis
+Disallow: /diagnosis/
+Disallow: /profile
+Disallow: /auth
+Disallow: /reset-password
+Disallow: /payment-success
+Disallow: /payment-failed
+
+# Public sharable diagnosis links are allowed for indexing
+Allow: /diagnosis/share/
+
+Sitemap: https://virum.com.br/sitemap.xml

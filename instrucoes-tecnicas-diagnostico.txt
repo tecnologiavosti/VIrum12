@@ -1,0 +1,342 @@
+Corrija o frontend do diagnóstico da VIRUM para ficar compatível com a Edge Function process-diagnosis atualmente deployada no Supabase.
+
+IMPORTANTE:
+A lógica de geração e validação do diagnóstico já foi corrigida no backend/Supabase e está deployada.
+
+NÃO altere a Edge Function.
+NÃO recrie a lógica de IA no frontend.
+NÃO altere prompts.
+NÃO altere schemas do banco.
+NÃO crie novas regras de validação no frontend.
+NÃO adicione bloqueios de conteúdo que possam rejeitar uma resposta válida da IA.
+
+OBJETIVO
+
+O frontend deve apenas:
+
+1. Criar/iniciar o diagnóstico.
+2. Enviar o diagnosisId para process-diagnosis.
+3. Solicitar as seções sequencialmente.
+4. Ler o status retornado pelo backend.
+5. Continuar a geração a partir de nextSection.
+6. Buscar novamente os dados do diagnóstico após cada seção concluída.
+7. Exibir todas as seções realmente geradas.
+8. Permitir que um diagnóstico parcialmente concluído continue de onde parou.
+9. Exibir corretamente erros retornados pela Edge Function.
+10. Não interpretar erro de uma seção como se o diagnóstico inteiro estivesse corrompido quando houver possibilidade de continuar.
+
+FLUXO CORRETO
+
+A Edge Function process-diagnosis controla a ordem:
+
+body
+strategy
+color
+style
+modeling
+essentials
+capsule
+final
+
+O frontend NÃO deve assumir que uma chamada gera o diagnóstico inteiro.
+
+Depois de chamar process-diagnosis, use a resposta:
+
+{
+  success,
+  diagnosisId,
+  section,
+  completed,
+  nextSection,
+  completedSections,
+  totalSections
+}
+
+Se completed === false e nextSection existir:
+
+continue chamando process-diagnosis usando:
+
+{
+  diagnosisId,
+  section: nextSection
+}
+
+Se completed === true:
+
+pare o processamento e carregue o diagnóstico completo do banco.
+
+IMPORTANTE SOBRE RETENTATIVA
+
+Se a Edge Function retornar:
+
+{
+  success: false,
+  retryable: true,
+  ...
+}
+
+o frontend pode tentar novamente.
+
+Se retornar:
+
+{
+  success: false,
+  retryable: false,
+  ...
+}
+
+ não faça loop infinito.
+
+Para HTTP 429, respeite retryAfter retornado pelo backend.
+
+Para erros 401/402, NÃO tente gerar novamente indefinidamente.
+
+NÃO faça retry automático agressivo.
+
+NÃO dispare várias chamadas simultaneamente para o mesmo diagnosisId.
+
+GARANTIA DE SEQUENCIALIDADE
+
+As chamadas de process-diagnosis precisam ser estritamente sequenciais.
+
+Nunca faça:
+
+Promise.all(...)
+Promise.allSettled(...)
+ou múltiplas chamadas paralelas para as seções.
+
+A próxima seção só pode começar depois que a chamada anterior retornar sucesso e fornecer nextSection.
+
+ESTADO DO DIAGNÓSTICO
+
+O frontend deve distinguir:
+
+- processing
+- completed
+- failed
+
+E também deve usar processing_step para indicar a seção atual.
+
+Não invente estados adicionais se não forem necessários.
+
+RECUPERAÇÃO
+
+Se o usuário atualizar a página durante a geração:
+
+1. buscar o diagnóstico existente;
+2. verificar quais seções já estão preenchidas;
+3. verificar status/processing_step;
+4. continuar a partir da próxima seção necessária;
+5. nunca regenerar uma seção que já esteja validamente salva.
+
+Se o backend retornar alreadyCompleted === true:
+
+não gere novamente essa seção.
+Use nextSection para continuar.
+
+DADOS DO DIAGNÓSTICO
+
+O frontend deve consumir os campos existentes:
+
+body_analysis
+strategy_analysis
+color_analysis
+style_analysis
+modeling_analysis
+wardrobe_essentials
+capsule_wardrobe
+final_diagnosis
+
+Não renomeie esses campos.
+
+Não altere o schema do banco.
+
+RENDERIZAÇÃO
+
+Garanta que todas as seções do diagnóstico sejam renderizadas quando existirem.
+
+A ordem visual deve ser:
+
+1. Abertura / Análise corporal
+2. Estratégia de imagem
+3. Coloração
+4. Assinatura visual
+5. Modelagem e tecidos
+6. Guarda-roupa essencial
+7. Cápsula de looks
+8. Diagnóstico final
+
+O frontend não deve substituir conteúdo real por textos genéricos como:
+
+"Conteúdo em consolidação"
+
+"Em breve"
+
+"Análise indisponível"
+
+quando a seção já possuir conteúdo válido no banco.
+
+Se uma seção ainda não estiver disponível porque está sendo processada, mostre um estado de carregamento apropriado.
+
+IMAGENS DO FORMULÁRIO
+
+Mantenha o carregamento das imagens enviadas pelo usuário no início do diagnóstico.
+
+As imagens enviadas no formulário devem continuar sendo recuperadas pelas referências/URLs já armazenadas pelo projeto.
+
+NÃO substitua essas imagens por imagens genéricas.
+
+NÃO remova as imagens do diagnóstico.
+
+NÃO altere o pipeline de imagens do Supabase.
+
+A seção inicial do diagnóstico deve mostrar as imagens reais enviadas pelo usuário quando elas existirem.
+
+IMPORTANTE:
+Essas imagens pertencem ao diagnóstico do usuário e não devem ser confundidas com imagens decorativas ou imagens geradas pela IA.
+
+PDF
+
+O PDF deve utilizar os mesmos dados do diagnóstico exibidos na tela.
+
+Garanta que o PDF inclua todas as seções disponíveis:
+
+body_analysis
+strategy_analysis
+color_analysis
+style_analysis
+modeling_analysis
+wardrobe_essentials
+capsule_wardrobe
+final_diagnosis
+
+Não gere um PDF resumido quando o diagnóstico completo estiver disponível.
+
+As imagens reais enviadas pelo usuário também devem ser incluídas no início do PDF quando estiverem disponíveis.
+
+Não substitua conteúdo real por placeholders.
+
+TRATAMENTO DE JSON
+
+O parsing robusto da resposta da IA já pertence ao backend.
+
+NÃO tente fazer parsing ou correção da resposta bruta da IA no frontend.
+
+O frontend recebe o resultado já validado/salvo pelo backend.
+
+ERROS
+
+Quando receber erro da Edge Function, mostre uma mensagem amigável ao usuário, mas preserve o erro técnico no console.
+
+Não transforme automaticamente qualquer erro em:
+
+"Erro desconhecido"
+
+Não esconda o diagnosisId.
+
+Não descarte o diagnóstico existente quando uma seção falhar.
+
+Se algumas seções já estiverem salvas, elas devem continuar disponíveis.
+
+IMPORTANTE SOBRE O ERRO ANTIGO
+
+O backend anteriormente rejeitava conteúdo contendo determinadas palavras, incluindo "campanha".
+
+Essa regra foi removida/corrigida no backend.
+
+NÃO recrie essa regra no frontend.
+
+NÃO procure palavras como:
+
+campanha
+lançamento
+fornecedor
+MVP
+roadmap
+
+para bloquear o diagnóstico.
+
+O frontend não deve possuir uma lista própria de palavras proibidas para validar o conteúdo da IA.
+
+CLEAN CODE
+
+Faça a implementação de forma simples e centralizada.
+
+Evite duplicação.
+
+Se já existir uma função responsável por chamar process-diagnosis, reutilize-a.
+
+Se necessário, crie uma única função responsável pelo processamento sequencial, por exemplo:
+
+processDiagnosisSequentially(diagnosisId)
+
+Ela deve:
+
+- consultar o estado atual;
+- descobrir a próxima seção;
+- chamar a Edge Function;
+- aguardar a resposta;
+- atualizar o estado;
+- continuar para nextSection;
+- parar quando completed === true.
+
+Não espalhe chamadas da Edge Function em vários componentes.
+
+Não crie loops concorrentes.
+
+Não altere componentes que não tenham relação com o fluxo do diagnóstico.
+
+NÃO faça uma refatoração geral do projeto.
+
+Faça somente as alterações necessárias para compatibilidade com a Edge Function atual.
+
+ANTES DE ALTERAR
+
+Procure no código existente:
+
+- process-diagnosis
+- diagnosisId
+- nextSection
+- completedSections
+- processing_step
+- body_analysis
+- strategy_analysis
+- color_analysis
+- style_analysis
+- modeling_analysis
+- wardrobe_essentials
+- capsule_wardrobe
+- final_diagnosis
+- geração do PDF
+- carregamento das imagens do formulário
+
+Analise o fluxo atual e preserve o que já funciona.
+
+DEPOIS DA ALTERAÇÃO
+
+Verifique especificamente:
+
+1. Um diagnóstico novo consegue iniciar.
+2. body é gerado.
+3. strategy é gerado somente depois de body.
+4. color é gerado somente depois de strategy.
+5. style é gerado somente depois de color.
+6. modeling é gerado somente depois de style.
+7. essentials é gerado somente depois de modeling.
+8. capsule é gerado somente depois de essentials.
+9. final é gerado somente depois de capsule.
+10. O frontend para quando completed === true.
+11. Recarregar a página não reinicia o diagnóstico do zero.
+12. Uma seção já salva não é regenerada.
+13. Erros retryable não causam chamadas concorrentes.
+14. Erros não retryable não entram em loop.
+15. As imagens reais enviadas no formulário continuam aparecendo no início do diagnóstico.
+16. O PDF contém todas as seções do diagnóstico.
+17. Nenhuma validação antiga de palavras proibidas permanece no frontend.
+
+IMPORTANTE:
+Não altere o backend/Supabase.
+Não altere a Edge Function process-diagnosis.
+Não altere o banco.
+Não substitua a arquitetura atual por outra.
+Corrija somente o frontend Lovable necessário para consumir corretamente a implementação já deployada.
