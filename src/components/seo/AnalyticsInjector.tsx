@@ -16,6 +16,9 @@ function inject(id: string, html: string) {
 
 function injectSrc(id: string, src: string) {
   if (document.getElementById(id)) return;
+  // Google Ads in index.html already loads the shared gtag library.
+  if (src.startsWith('https://www.googletagmanager.com/gtag/js') &&
+      document.querySelector('script[src^="https://www.googletagmanager.com/gtag/js"]')) return;
   const s = document.createElement('script');
   s.id = id;
   s.async = true;
@@ -34,7 +37,7 @@ export function AnalyticsInjector() {
 
     if (g.ga4) {
       injectSrc('ga4-src', `https://www.googletagmanager.com/gtag/js?id=${g.ga4}`);
-      inject('ga4-init', `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${g.ga4}');`);
+      inject('ga4-init', `gtag('config','${g.ga4}');`);
     }
     if (g.gtm) {
       inject('gtm-init', `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s);j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','${g.gtm}');`);

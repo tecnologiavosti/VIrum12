@@ -1,3 +1,4 @@
+import { trackWhatsAppContact } from '@/lib/googleAds';
 import { Logo } from '@/components/Logo';
 import { Link } from 'react-router-dom';
 import { Instagram, Phone } from 'lucide-react';
@@ -70,6 +71,7 @@ export function Footer() {
               {waLink && (
                 <a
                   href={waLink}
+                    onClick={trackWhatsAppContact}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="WhatsApp VIRUM"
@@ -138,6 +140,7 @@ export function Footer() {
                 <li>
                   <a
                     href={waLink}
+                    onClick={trackWhatsAppContact}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-2"
