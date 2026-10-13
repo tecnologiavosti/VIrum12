@@ -2,48 +2,14 @@ import { trackWhatsAppContact } from '@/lib/googleAds';
 import { Logo } from '@/components/Logo';
 import { Link } from 'react-router-dom';
 import { Instagram, Phone } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { formatPhoneBR, phoneDigits } from '@/lib/formatPhone';
-
-interface ContactSettings {
-  email?: string;
-  phone?: string;
-  instagram?: string;
-}
-
-function unwrap(val: any): string {
-  if (typeof val === 'string') return val.replace(/^"|"$/g, '');
-  return val ?? '';
-}
+import { VIRUM_CONTACT, WhatsAppCTA } from '@/components/WhatsAppCTA';
 
 export function Footer() {
-  const [contact, setContact] = useState<ContactSettings>({});
-
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase
-        .from('site_settings')
-        .select('key, value')
-        .in('key', ['contact_email', 'contact_phone', 'contact_instagram']);
-      if (data) {
-        const map: Record<string, string> = {};
-        data.forEach((s: any) => { map[s.key] = unwrap(s.value); });
-        setContact({
-          email: map.contact_email,
-          phone: map.contact_phone,
-          instagram: map.contact_instagram,
-        });
-      }
-    })();
-  }, []);
-
-  const phoneFormatted = contact.phone ? formatPhoneBR(contact.phone) : '';
-  const phoneRaw = contact.phone ? phoneDigits(contact.phone) : '';
-  const waLink = phoneRaw ? `https://wa.me/55${phoneRaw}` : '';
-  const igHandle = (contact.instagram || '').replace(/^@/, '').trim();
-  const igLink = igHandle ? `https://instagram.com/${igHandle}` : '';
-  const email = contact.email || '';
+  const phoneFormatted = VIRUM_CONTACT.phone;
+  const waLink = VIRUM_CONTACT.whatsapp;
+  const igHandle = VIRUM_CONTACT.instagramHandle;
+  const igLink = VIRUM_CONTACT.instagram;
+  const email = VIRUM_CONTACT.email;
 
   return (
     <footer className="bg-secondary border-t border-border">
@@ -125,6 +91,7 @@ export function Footer() {
 
           <div>
             <h4 className="font-serif text-lg text-foreground mb-5">Contato</h4>
+            <WhatsAppCTA className="w-full mb-5" />
             <ul className="space-y-3">
               {email && (
                 <li>

@@ -1,3 +1,4 @@
+import { WhatsAppCTA } from '@/components/WhatsAppCTA';
 import { useEffect } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
@@ -147,6 +148,7 @@ const Index = () => {
                 <Button variant="premium" size="lg" onClick={() => navigate('/auth?mode=signup')} className="text-lg px-10 py-6 shadow-[0_0_30px_hsl(43,74%,49%,0.2)]">
                   Começar Agora <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
+                <WhatsAppCTA className="text-lg px-8 py-6" label="Tire suas dúvidas" />
                 <Button variant="outline" size="lg" onClick={() => navigate('/how-it-works')} className="text-lg px-10 py-6 border-border/80">
                   Como Funciona
                 </Button>
@@ -403,9 +405,12 @@ const Index = () => {
                 viewport={{ once: true }}
                 transition={{ delay: 0.3, duration: 0.4 }}
               >
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <WhatsAppCTA className="text-lg px-10 py-6" label="Fale com a VIRUM" />
                 <Button variant="premium" size="lg" onClick={() => document.getElementById('pricing')?.scrollIntoView({ behavior: 'smooth' })} className="text-lg px-10 py-6 shadow-[0_0_40px_hsl(43,74%,49%,0.2)]">
                   <Crown className="mr-2 h-5 w-5" /> Ver Planos e Começar
                 </Button>
+                </div>
               </motion.div>
             </div>
           </section>

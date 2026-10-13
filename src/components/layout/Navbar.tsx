@@ -1,3 +1,4 @@
+import { WhatsAppCTA } from '@/components/WhatsAppCTA';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
@@ -101,6 +102,7 @@ export function Navbar() {
         </div>
 
         <div className="hidden md:flex items-center gap-3">
+          <WhatsAppCTA className="hidden lg:inline-flex" label="Fale conosco" />
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -175,6 +177,7 @@ export function Navbar() {
                 </Link>
               ))}
               <div className="flex flex-col gap-2 pt-4 mt-2 border-t border-border/50">
+                <WhatsAppCTA className="w-full" label="Fale conosco" />
                 {user ? (
                   <>
                     <Button variant="outline" className="justify-start" onClick={() => navigate('/account')}>
