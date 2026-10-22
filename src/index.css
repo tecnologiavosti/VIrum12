@@ -213,3 +213,10 @@
   .delay-400 { animation-delay: 400ms; }
   .delay-500 { animation-delay: 500ms; }
 }
+
+/* Modo aplicativo: gestos, areas seguras e viewport no celular e tablet. */
+@media (max-width: 1023px) {
+  .mobile-app-page { min-height: 100dvh; overscroll-behavior-y: contain; }
+  button, a, [role="button"] { -webkit-tap-highlight-color: transparent; }
+  input, textarea, select { font-size: max(16px, 1em); }
+}

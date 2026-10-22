@@ -167,6 +167,15 @@ export default function Dashboard() {
     setCurrentPage(1);
   }, [statusFilter, dateFrom, dateTo]);
 
+  // Garante que o botão Histórico funcione também ao chegar de outra tela.
+  useEffect(() => {
+    if (loadingData || window.location.hash !== '#historico') return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById('historico')?.scrollIntoView({ block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loadingData]);
+
   const handleStartDiagnosis = () => {
     sessionStorage.removeItem('diagnosis_photos_cache');
     sessionStorage.removeItem('virum_form_v2_answers');

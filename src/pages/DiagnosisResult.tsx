@@ -1103,7 +1103,7 @@ export default function DiagnosisResult() {
       <Layout showFooter={false}>
         <div className="min-h-screen bg-background text-foreground">
           {/* ── Sticky Header ── */}
-          <div className="sticky top-16 z-30 border-b border-border/30 backdrop-blur-xl bg-background/80">
+          <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] lg:top-16 z-30 border-b border-border/30 backdrop-blur-xl bg-background/80">
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
               <button onClick={() => navigate('/account')} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors duration-300 group">
                 <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />

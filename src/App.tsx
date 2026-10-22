@@ -1,14 +1,16 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
-import { AuthProvider } from "@/hooks/useAuth";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { AnimatePresence } from "framer-motion";
 import { RequireUser } from "@/components/guards/RoleGuards";
 import { RouteMeta } from "@/components/seo/RouteMeta";
 import { DynamicSEOHead } from "@/components/seo/DynamicSEOHead";
 import { AnalyticsInjector } from "@/components/seo/AnalyticsInjector";
+import { MobileBottomNav } from "@/components/layout/MobileBottomNav";
+import { isMobileAppPath } from "@/components/layout/mobileAppRoutes";
 
 // Eagerly load Index (landing page) for fast first paint
 import Index from "./pages/Index";
@@ -99,17 +101,60 @@ function LazyFallback() {
   );
 }
 
+/**
+ * A página inicial é a porta de entrada do app no celular.
+ * Suporta navegador mobile, tablet e WebViews/Capacitor com user-agent de desktop.
+ * No desktop preserva-se a vitrine já protegida por RequireUser.
+ */
+function isMobileOrTablet() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const isNative = Boolean(
+    (window as Window & { Capacitor?: { isNativePlatform?: () => boolean } })
+      .Capacitor?.isNativePlatform?.()
+  );
+  const mobileUA = /Android|iPhone|iPad|iPod|Mobile|Tablet|Silk|Kindle/i.test(ua);
+  const iPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  const compact = window.innerWidth <= 1024 ||
+    (window.matchMedia?.('(max-width: 1024px)')?.matches ?? false);
+  const touch = navigator.maxTouchPoints > 0 ||
+    (window.matchMedia?.('(pointer: coarse)')?.matches ?? false);
+  return isNative || mobileUA || iPadOS || window.innerWidth <= 767 || (compact && touch);
+}
+
+function HomeRoute() {
+  const { user, loading } = useAuth();
+  if (isMobileOrTablet()) {
+    return loading ? <LazyFallback /> :
+      <Navigate to={user ? '/account' : '/auth'} replace />;
+  }
+  return <RequireUser><Index /></RequireUser>;
+}
+
+function MobileRouteScroll() {
+  const location = useLocation();
+  useEffect(() => {
+    if (isMobileAppPath(location.pathname) && !location.hash) {
+      window.scrollTo(0, 0);
+    }
+  }, [location.pathname, location.hash]);
+  return null;
+}
+
 const queryClient = new QueryClient();
 
 function AnimatedRoutes() {
   const location = useLocation();
+  const { user } = useAuth();
   return (
-    <AnimatePresence mode="wait">
+    <>
+      <MobileRouteScroll />
+      <AnimatePresence mode="wait">
       <DynamicSEOHead />
       <AnalyticsInjector />
       <RouteMeta />
       <Routes location={location} key={location.pathname}>
-        <Route path="/" element={<RequireUser><Index /></RequireUser>} />
+        <Route path="/" element={<HomeRoute />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/account" element={<RequireUser><Dashboard /></RequireUser>} />
         <Route path="/pricing" element={<RequireUser><Pricing /></RequireUser>} />
@@ -150,7 +195,9 @@ function AnimatedRoutes() {
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>
-    </AnimatePresence>
+      </AnimatePresence>
+      {user && isMobileAppPath(location.pathname) && <MobileBottomNav />}
+    </>
   );
 }
 

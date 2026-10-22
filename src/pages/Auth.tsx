@@ -266,12 +266,12 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen min-h-[100dvh] flex">
       {/* Left side - Form */}
-      <div className="w-full lg:w-1/2 flex flex-col justify-center px-8 md:px-16 lg:px-24 py-12">
+      <div className="w-full lg:w-1/2 flex flex-col justify-center px-6 sm:px-8 md:px-16 lg:px-24 py-10">
         <button 
           onClick={() => navigate('/')}
-          className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors mb-8 self-start"
+          className="hidden lg:flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors mb-8 self-start"
         >
           <ArrowLeft className="h-4 w-4" />
           Voltar
