@@ -47,6 +47,7 @@ interface Subscription {
   status: string;
   plan: string;
   current_period_end: string | null;
+  plans?: { name: string } | null;
 }
 
 type StatusFilter = 'all' | 'completed' | 'processing' | 'pending';
@@ -69,7 +70,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 export default function Dashboard() {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
-  const { access: planAccess } = usePlanAccess();
+  const { access: planAccess, refetch: refetchPlanAccess } = usePlanAccess();
   const [diagnoses, setDiagnoses] = useState<Diagnosis[]>([]);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loadingData, setLoadingData] = useState(true);
@@ -88,19 +89,8 @@ export default function Dashboard() {
     }
   }, [user, loading, navigate]);
 
-  useEffect(() => {
-    if (user) {
-      fetchData();
-    }
-  }, [user]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      if (user?.id) {
-        try {
-          await supabase.rpc('apply_pending_coupon');
-        } catch { /* ignora erro silencioso de ativação p/ cupons já processados */ }
-      }
       const [diagnosesRes, subscriptionRes] = await Promise.all([
         supabase
           .from('diagnoses')
@@ -110,7 +100,7 @@ export default function Dashboard() {
           .order('created_at', { ascending: false }),
         supabase
           .from('subscriptions')
-          .select('status, plan, current_period_end')
+          .select('status, plan, current_period_end, plans(name)')
           .eq('user_id', user?.id)
           .maybeSingle(),
       ]);
@@ -118,15 +108,25 @@ export default function Dashboard() {
       if (diagnosesRes.data) {
         setDiagnoses(diagnosesRes.data);
       }
-      if (subscriptionRes.data) {
-        setSubscription(subscriptionRes.data);
-      }
+      if (!subscriptionRes.error) setSubscription(subscriptionRes.data as Subscription | null);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoadingData(false);
     }
-  };
+  }, [user?.id]);
+
+  useEffect(() => { if (user) void fetchData(); }, [user, fetchData]);
+
+  // Poll as well as refresh on focus: payment webhooks may arrive after the return.
+  useEffect(() => {
+    if (!user) return;
+    const refresh = () => { if (document.visibilityState === 'visible') { void fetchData(); void refetchPlanAccess(); } };
+    const timer = window.setInterval(refresh, 10000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
+  }, [user, fetchData, refetchPlanAccess]);
 
   const canUseTemporaryAutoDiagnosis = useMemo(() => {
     if (!user?.created_at) return false;
@@ -177,6 +177,7 @@ export default function Dashboard() {
   }, [loadingData]);
 
   const handleStartDiagnosis = () => {
+    if (!planAccess?.has_subscription) { navigate('/pricing'); return; }
     sessionStorage.removeItem('diagnosis_photos_cache');
     sessionStorage.removeItem('virum_form_v2_answers');
     navigate('/new-diagnosis');
@@ -249,7 +250,7 @@ export default function Dashboard() {
       // Soft delete: hides from the UI but never restores plan credits.
       const { error } = await supabase
         .from('diagnoses')
-        .update({ deleted_at: new Date().toISOString() } as any)
+        .update({ deleted_at: new Date().toISOString() } as never)
         .eq('id', id);
       if (error) throw error;
       setDiagnoses(prev => prev.filter(d => d.id !== id));
@@ -267,7 +268,7 @@ export default function Dashboard() {
     );
   }
 
-  const hasActiveSubscription = subscription?.status === 'active';
+  const hasActiveSubscription = subscription?.status === 'active' && (!subscription.current_period_end || new Date(subscription.current_period_end).getTime() > Date.now());
 
   // Stats
   const completedCount = diagnoses.filter(d => d.status === 'completed').length;
@@ -366,7 +367,7 @@ export default function Dashboard() {
                 </div>
                 <div>
                   <h3 className="font-medium text-lg">
-                    {hasActiveSubscription ? (planAccess?.plan_name || 'Assinatura Ativa') : 'Sem Assinatura'}
+                    {hasActiveSubscription ? (subscription?.plans?.name || planAccess?.plan_name || 'Assinatura Ativa') : 'Sem Assinatura'}
                   </h3>
                   <p className="text-muted-foreground text-sm">
                     {hasActiveSubscription

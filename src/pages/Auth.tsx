@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useAdmin } from '@/hooks/useAdmin';
@@ -11,35 +11,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 import { z } from 'zod';
-import { invokeAuthenticatedFunction } from '@/lib/authenticatedFunctions';
-
-const planIdSchema = z.string().uuid();
 
 const signUpSchema = z.object({
   fullName: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   email: z.string().email('Email inválido'),
   password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
   referralCode: z.string().optional(),
-  couponCode: z.string().max(40, 'Cupom inválido').optional(),
   acceptTerms: z.literal(true, { errorMap: () => ({ message: 'Você deve aceitar os termos' }) }),
 });
-
-interface CouponPreview {
-  valid: boolean;
-  error?: string;
-  code?: string;
-  description?: string | null;
-  discount_type?: string;
-  discount_value?: number;
-  discount_cents?: number;
-  original_cents?: number;
-  final_cents?: number;
-  plan_name?: string;
-  plan_id?: string;
-  is_full_discount?: boolean;
-}
-
-const brl = (cents: number) => `R$ ${(cents / 100).toFixed(2).replace('.', ',')}`;
 
 const signInSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -48,12 +27,6 @@ const signInSchema = z.object({
 
 export default function Auth() {
   const [searchParams] = useSearchParams();
-  const selectedPlanId = useMemo(() => {
-    const urlPlan = searchParams.get('plan');
-    if (urlPlan && planIdSchema.safeParse(urlPlan).success) return urlPlan;
-    const storedPlan = sessionStorage.getItem('virum:selected-plan-id');
-    return storedPlan && planIdSchema.safeParse(storedPlan).success ? storedPlan : null;
-  }, [searchParams]);
   const [isSignUp, setIsSignUp] = useState(searchParams.get('mode') === 'signup');
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -63,35 +36,9 @@ export default function Auth() {
     email: '',
     password: '',
     referralCode: '',
-    couponCode: searchParams.get('coupon')?.toUpperCase() ?? '',
   });
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [coupon, setCoupon] = useState<CouponPreview | null>(null);
-  const [checkingCoupon, setCheckingCoupon] = useState(false);
-  const checkoutStarted = useRef(false);
-
-  const checkCoupon = async (rawCode: string): Promise<CouponPreview | null> => {
-    const code = rawCode.trim().toUpperCase();
-    if (!code) {
-      setCoupon(null);
-      return null;
-    }
-    setCheckingCoupon(true);
-    try {
-      const { data, error } = await supabase.rpc('validate_coupon_public', {
-        _code: code,
-        // Keep both RPC arguments: omitting _plan_id makes the overload ambiguous.
-        _plan_id: selectedPlanId ?? null,
-      });
-      const preview = (error ? { valid: false, error: 'Não foi possível validar o cupom' } : data) as CouponPreview;
-      setCoupon(preview);
-      return preview;
-    } finally {
-      setCheckingCoupon(false);
-    }
-  };
-
   const { signIn, signUp, user } = useAuth();
   const { isAdmin, loading: adminLoading } = useAdmin();
   const navigate = useNavigate();
@@ -102,46 +49,9 @@ export default function Auth() {
       navigate('/admin', { replace: true });
       return;
     }
-    if (!selectedPlanId) {
-      navigate('/account', { replace: true });
-      return;
-    }
-    if (checkoutStarted.current) return;
-    checkoutStarted.current = true;
-
-    const startCheckout = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await invokeAuthenticatedFunction<{
-          init_point?: string;
-          free?: boolean;
-          activated?: boolean;
-          error?: string;
-        }>('create-checkout', {
-          plan_id: selectedPlanId,
-          coupon_code: formData.couponCode.trim().toUpperCase() || undefined,
-          success_url: `${window.location.origin}/payment-success`,
-          failure_url: `${window.location.origin}/payment-failed`,
-          pending_url: `${window.location.origin}/payment-success?status=pending`,
-        });
-        if (error || data?.error) throw new Error(data?.error || error?.message || 'Erro ao iniciar checkout');
-        sessionStorage.removeItem('virum:selected-plan-id');
-        if (data?.free || data?.activated) {
-          navigate('/payment-success', { replace: true });
-        } else if (data?.init_point) {
-          window.location.assign(data.init_point);
-        } else {
-          throw new Error('Checkout não retornou uma URL de pagamento');
-        }
-      } catch (error) {
-        checkoutStarted.current = false;
-        setLoading(false);
-        toast.error(error instanceof Error ? error.message : 'Erro ao iniciar checkout');
-      }
-    };
-
-    void startCheckout();
-  }, [user, isAdmin, adminLoading, navigate, selectedPlanId, formData.couponCode]);
+    sessionStorage.removeItem('virum:selected-plan-id');
+    navigate('/account', { replace: true });
+  }, [user, isAdmin, adminLoading, navigate]);
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,24 +107,11 @@ export default function Auth() {
           }
         }
 
-        // Valida o cupom de desconto (opcional) antes de criar a conta
-        const rawCoupon = formData.couponCode.trim().toUpperCase();
-        if (rawCoupon.length > 0) {
-          const preview = await checkCoupon(rawCoupon);
-          if (!preview?.valid) {
-            setErrors({ couponCode: preview?.error || 'Cupom inválido' });
-            setLoading(false);
-            return;
-          }
-        }
-
         const { error } = await signUp(
           formData.email,
           formData.password,
           formData.fullName,
           rawRef || undefined,
-          rawCoupon || undefined,
-          selectedPlanId || undefined,
         );
         if (error) {
           if (error.message.includes('already registered')) {
@@ -224,7 +121,6 @@ export default function Auth() {
           }
         } else {
           // Register terms acceptance timestamp on profile (best-effort).
-          // Coupon activation is centralized in create-checkout to avoid applying it twice.
           try {
             const { data: { user: u } } = await supabase.auth.getUser();
             if (u) {
@@ -401,46 +297,6 @@ export default function Auth() {
                 {errors.referralCode && <p className="text-destructive text-sm">{errors.referralCode}</p>}
               </div>
             )}
-
-            {isSignUp && (
-              <div className="space-y-2">
-                <Label htmlFor="couponCode">
-                  Cupom de Desconto <span className="text-muted-foreground font-normal">(opcional)</span>
-                </Label>
-                <Input
-                  id="couponCode"
-                  type="text"
-                  placeholder="Ex: VIRUM20"
-                  value={formData.couponCode}
-                  onChange={(e) => {
-                    setFormData({ ...formData, couponCode: e.target.value.toUpperCase() });
-                    setCoupon(null);
-                    setErrors((prev) => ({ ...prev, couponCode: '' }));
-                  }}
-                  onBlur={(e) => checkCoupon(e.target.value)}
-                  className="bg-card border-border focus:border-primary uppercase tracking-wider"
-                  autoComplete="off"
-                  maxLength={40}
-                />
-                {checkingCoupon && <p className="text-muted-foreground text-sm">Validando cupom...</p>}
-                {!checkingCoupon && coupon?.valid && (
-                  <p className="text-primary text-sm">
-                    {coupon.is_full_discount
-                      ? `Cupom ${coupon.code}: 100% de desconto — plano ${coupon.plan_name} liberado sem custo.`
-                      : `Cupom ${coupon.code}: ${
-                          coupon.discount_type === 'percent'
-                            ? `${coupon.discount_value}% de desconto`
-                            : `${brl(coupon.discount_cents ?? 0)} de desconto`
-                        }${coupon.plan_name ? ` no plano ${coupon.plan_name}` : ''} — de ${brl(coupon.original_cents ?? 0)} por ${brl(coupon.final_cents ?? 0)}.`}
-                  </p>
-                )}
-                {!checkingCoupon && coupon && !coupon.valid && !errors.couponCode && (
-                  <p className="text-destructive text-sm">{coupon.error}</p>
-                )}
-                {errors.couponCode && <p className="text-destructive text-sm">{errors.couponCode}</p>}
-              </div>
-            )}
-
 
             {isSignUp && (
               <div className="space-y-2">

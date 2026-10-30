@@ -7,7 +7,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string, referralCode?: string, couponCode?: string, planId?: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName: string, referralCode?: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -35,19 +35,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signUp = async (email: string, password: string, fullName: string, referralCode?: string, couponCode?: string, planId?: string) => {
+  const signUp = async (email: string, password: string, fullName: string, referralCode?: string) => {
     try {
-      const redirectUrl = planId
-        ? `${window.location.origin}/auth?plan=${encodeURIComponent(planId)}`
-        : `${window.location.origin}/auth`;
+      const redirectUrl = `${window.location.origin}/auth`;
       const data: Record<string, string> = { full_name: fullName };
       if (referralCode && referralCode.trim().length > 0) {
         data.referral_code = referralCode.trim().toUpperCase();
       }
-      if (couponCode && couponCode.trim().length > 0) {
-        data.coupon_code = couponCode.trim().toUpperCase();
-      }
-      if (planId) data.selected_plan_id = planId;
       const { error } = await supabase.auth.signUp({
         email,
         password,
