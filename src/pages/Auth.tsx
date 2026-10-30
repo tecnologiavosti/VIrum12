@@ -81,7 +81,8 @@ export default function Auth() {
     try {
       const { data, error } = await supabase.rpc('validate_coupon_public', {
         _code: code,
-        _plan_id: selectedPlanId ?? undefined,
+        // Keep both RPC arguments: omitting _plan_id makes the overload ambiguous.
+        _plan_id: selectedPlanId ?? null,
       });
       const preview = (error ? { valid: false, error: 'Não foi possível validar o cupom' } : data) as CouponPreview;
       setCoupon(preview);
