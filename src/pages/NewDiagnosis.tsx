@@ -77,6 +77,8 @@ export default function NewDiagnosis() {
   const [currentStep, setCurrentStep] = useState(1);
   const [debugLoading, setDebugLoading] = useState(false);
   const processingRef = useRef<string | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
   const [photos, setPhotos] = useState<DiagnosisPhotos>(() => {
     const saved = sessionStorage.getItem('diagnosis_photos_cache');
@@ -179,11 +181,14 @@ export default function NewDiagnosis() {
   };
 
   const fetchDiagnosisRow = async (id: string): Promise<Record<string, unknown> | null> => {
-    const { data, error } = await supabase.from('diagnoses').select('*').eq('id', id).maybeSingle();
-    if (error) { console.error('[NewDiagnosis] ERROR fetch diagnosis', id, error.message); return null; }
-    return (data as unknown as Record<string, unknown>) || null;
+    try {
+      const { data, error } = await supabase.from('diagnoses').select('*').eq('id', id).maybeSingle();
+      if (error) { console.warn('[NewDiagnosis] Progress check unavailable:', error.message); return null; }
+      return (data as unknown as Record<string, unknown>) || null;
+    } catch { return null; } // A connection failure does not mean the diagnosis failed.
+
   };
-  const isSectionFilled = (row: Record<string, unknown>, section: string): boolean => { const col = SECTION_COLUMN[section]; if (!(col in row)) return true; const value = row[col]; if (!value) return false; if (typeof value === 'object') { const obj = value as Record<string, unknown>; if (obj.error) return false; return Object.keys(obj).length > 0; } return true; };
+  const isSectionFilled = (row: Record<string, unknown>, section: string): boolean => { const col = SECTION_COLUMN[section]; if (!(col in row)) return false; const value = row[col]; if (!value) return false; if (typeof value === 'object') { const obj = value as Record<string, unknown>; if (obj.error) return false; return Object.keys(obj).length > 0; } return true; };
   const pendingSectionFor = (row: Record<string, unknown>): string | null => SECTION_ORDER.find((section) => !isSectionFilled(row, section)) ?? null;
 
   const readFunctionError = async (error: { message?: string; context?: unknown }): Promise<{ status?: number; payload: Record<string, unknown>; retryAfter?: number }> => {
@@ -197,16 +202,40 @@ export default function NewDiagnosis() {
   };
 
   const processNext = async (diagId: string, section: string, attempt: number): Promise<void> => {
+    if (!mountedRef.current) return;
     if (attempt === 0) setRetryInSeconds(0);
-    const { data, error } = await supabase.functions.invoke('process-diagnosis', { body: { diagnosisId: diagId, section } });
+    // Fetch can reject outright in Android WebViews while the server keeps working.
+    const { data, error } = await supabase.functions.invoke('process-diagnosis', { body: { diagnosisId: diagId, section } })
+      .catch((cause: unknown) => ({ data: null, error: { message: cause instanceof Error ? cause.message : 'Failed to fetch' } }));
     if (error) {
       const parsed = await readFunctionError(error);
       const message = typeof parsed.payload?.error === 'string' ? parsed.payload.error : (error.message || 'Erro ao processar diagnóstico.');
-      if (parsed.status === 429 || parsed.status === 546 || parsed.status === 504) {
-        const waitSeconds = Math.max(5, Math.min(60, Number(parsed.retryAfter) || 15));
+      const transient = !parsed.status || [408, 429, 502, 503, 504, 546].includes(parsed.status);
+      // First reconcile with saved progress. Never replay a long AI request just
+      // because the HTTP response was lost: its result can still be saved later.
+      let row = await fetchDiagnosisRow(diagId);
+      if (transient && row?.status !== 'completed' && !(row && isSectionFilled(row, section))) {
+        const waitSeconds = Math.max(5, Math.min(30, Number(parsed.retryAfter) || 5));
         setRetryInSeconds(waitSeconds);
-        await sleep(waitSeconds * 1000);
-        return processNext(diagId, section, attempt + 1);
+        if (attempt === 0) toast.info('A conexão oscilou. Estamos verificando o progresso do diagnóstico automaticamente.');
+        for (let poll = 0; poll < 6; poll++) {
+          await sleep(waitSeconds * 1000);
+          if (!mountedRef.current) return;
+          row = await fetchDiagnosisRow(diagId);
+          if (row?.status === 'completed' || (row && isSectionFilled(row, section)) || row?.status === 'failed') break;
+        }
+        setRetryInSeconds(0);
+      }
+      if (!mountedRef.current) return;
+      if (row?.status === 'completed' || (row && isSectionFilled(row, section))) {
+        const next = row.status === 'completed' ? null : pendingSectionFor(row);
+        if (!next) { sessionStorage.removeItem('diagnosis_active_id'); setIsProcessing(false); return; }
+        return processNext(diagId, next, 0);
+      }
+      if (transient && row?.status !== 'failed') {
+        if (attempt < MAX_SECTION_ATTEMPTS) return processNext(diagId, section, attempt + 1);
+        const notice = 'Não foi possível confirmar o progresso por causa da conexão. O diagnóstico está salvo e pode continuar no servidor. Aguarde ou consulte o histórico antes de retomar.';
+        setProcessingError(notice); setIsProcessing(false); return;
       }
       if (parsed.status === 502 || parsed.status === 402 || parsed.status === 401) {
         const providerMessage = parsed.status === 402 || /crédito|credito|cota|cobrança/i.test(message)
@@ -214,7 +243,6 @@ export default function NewDiagnosis() {
           : 'A IA não está disponível no momento. O diagnóstico foi salvo e pode ser retomado em alguns instantes.';
         toast.error(providerMessage); setProcessingError(providerMessage); setIsProcessing(false); return;
       }
-      const row = await fetchDiagnosisRow(diagId);
       if (row && isSectionFilled(row, section)) { const next = pendingSectionFor(row); if (!next) { sessionStorage.removeItem('diagnosis_active_id'); setIsProcessing(false); return; } return processNext(diagId, next, 0); }
       if (attempt < MAX_SECTION_ATTEMPTS) { const waitSeconds = Math.min(30, 5 * (attempt + 1)); await sleep(waitSeconds * 1000); return processNext(diagId, section, attempt + 1); }
       toast.error(message); setProcessingError(message); setIsProcessing(false); return;
@@ -237,7 +265,7 @@ export default function NewDiagnosis() {
     if (!user) return;
     const activeId = sessionStorage.getItem('diagnosis_active_id');
     if (!activeId || processingRef.current) return;
-    (async () => { const row = await fetchDiagnosisRow(activeId); if (!row || row.user_id !== user.id) { sessionStorage.removeItem('diagnosis_active_id'); return; } if (row.status === 'completed') { sessionStorage.removeItem('diagnosis_active_id'); return; } const pending = pendingSectionFor(row); if (!pending) { sessionStorage.removeItem('diagnosis_active_id'); return; } await runProcessing(activeId, pending); })();
+    (async () => { const row = await fetchDiagnosisRow(activeId); if (!row) return; if (row.user_id !== user.id) { sessionStorage.removeItem('diagnosis_active_id'); return; } if (row.status === 'completed') { sessionStorage.removeItem('diagnosis_active_id'); return; } const pending = pendingSectionFor(row); if (!pending) { sessionStorage.removeItem('diagnosis_active_id'); return; } await runProcessing(activeId, pending); })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 

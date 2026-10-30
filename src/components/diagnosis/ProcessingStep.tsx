@@ -105,12 +105,17 @@ export function ProcessingStep({
       }
 
       if (status === 'completed') {
+        setHasFailed(false);
+        setFailureCode(null);
+        setFailureMessage(null);
         setBackendCompleted(true);
         setTargetIndex(aiSteps.length - 1);
         setVisualIndex((prev) => (prev < 0 ? 0 : prev));
         completeOnce();
         return;
       }
+
+      if (status === 'processing') { setHasFailed(false); setFailureCode(null); setFailureMessage(null); }
 
       if (step) {
         const idx = aiSteps.findIndex((s) => s.id === step);
@@ -122,6 +127,7 @@ export function ProcessingStep({
     };
 
     const syncProgress = async () => {
+      try {
       const { data, error } = await supabase
         .from('diagnoses')
         .select('processing_step, status, final_diagnosis')
@@ -134,6 +140,7 @@ export function ProcessingStep({
         data.status || null,
         (data.final_diagnosis as Record<string, unknown>) || null,
       );
+      } catch { /* Keep polling after temporary network failures. */ }
     };
 
     void syncProgress();
@@ -222,14 +229,14 @@ export function ProcessingStep({
           </div>
         )}
 
-        {retryInSeconds > 0 && (
+        {retryInSeconds > 0 && !isCompleted && (
           <div className="mt-5 inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-foreground">
             <Clock3 className="h-4 w-4 text-primary" />
-            Limite temporário da IA. Retomando automaticamente em {retryInSeconds}s.
+            Aguardando o servidor. Verificando o progresso a cada {retryInSeconds}s.
           </div>
         )}
 
-        {isPaused && (
+        {isPaused && !isCompleted && (
           <div className="mx-auto mt-5 max-w-lg space-y-3 rounded-md border border-destructive/30 bg-destructive/10 p-4">
             <div className="flex items-start justify-center gap-2 text-sm text-foreground">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
@@ -294,7 +301,7 @@ export function ProcessingStep({
         })}
       </div>
 
-      {hasFailed && (
+      {hasFailed && !isCompleted && (
         <div className="text-center pt-4 space-y-3">
           <div className="inline-flex items-center gap-2 text-sm text-destructive">
             <AlertTriangle className="w-4 h-4" />
