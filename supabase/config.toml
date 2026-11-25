@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.audit-runtime-v3]
 verify_jwt = false
+
+[functions.daily-blog-post]
+verify_jwt = false

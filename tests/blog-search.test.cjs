@@ -1,0 +1,27 @@
+const {readFileSync} = require('node:fs');
+const {test} = require('node:test');
+const assert = require('node:assert/strict');
+const ts = require('typescript');
+const source = readFileSync('supabase/functions/daily-blog-post/index.ts','utf8');
+const searchSource = source.slice(source.indexOf('export async function search('),source.indexOf('Deno.serve(')).replace('export async','async');
+const js = ts.transpileModule(searchSource,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+test('Tavily adapts sources, restricts domains, preserves Trends and never retries quota via SerpApi',async()=>{
+ let response={ok:true,json:async()=>({results:[{title:'Estilo',url:'https://gq.globo.com/a',content:'Fonte editorial'},{url:'javascript:bad'}]})};
+ const calls=[];
+ const search=new Function('env','fetch',js+';return search;')(name=>({TAVILY_API_KEY:'test-only',SERPAPI_KEY:'legacy-test'}[name]),async(url,options)=>{calls.push({url,options});return response;});
+ const found=await search({engine:'google',q:'estilo masculino site:gq.globo.com'});
+ assert.deepEqual(found.organic_results,[{title:'Estilo',link:'https://gq.globo.com/a',snippet:'Fonte editorial'}]);
+ const body=JSON.parse(calls[0].options.body);
+ assert.equal(body.search_depth,'basic');assert.equal(body.auto_parameters,false);assert.deepEqual(body.include_domains,['gq.globo.com']);
+ assert(!calls[0].url.includes('test-only'));
+ response={ok:true,json:async()=>({related_queries:{top:[]}})};
+ await search({engine:'google_trends',q:'estilo masculino'});
+ assert(calls[1].url.startsWith('https://serpapi.com/'));
+ response={ok:false,status:429};
+ await assert.rejects(search({engine:'google',q:'estilo'}),/Tavily HTTP 429/);
+ assert.equal(calls.length,3);
+ response={ok:true,json:async()=>({results:[]})};
+ assert.deepEqual((await search({engine:'google',q:'estilo'})).organic_results,[]);
+ response={ok:true,json:async()=>({error:'invalid'})};
+ await assert.rejects(search({engine:'google',q:'estilo'}),/resposta de pesquisa válida/);
+});

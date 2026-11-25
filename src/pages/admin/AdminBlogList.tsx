@@ -1,3 +1,4 @@
+import { BlogAutomation } from '@/components/BlogAutomation';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -65,6 +66,7 @@ export default function AdminBlogList() {
         <h1 className="text-2xl font-serif">Blog</h1>
         <Button onClick={() => navigate('/admin/blog/new')}><Plus className="h-4 w-4 mr-2" />Novo artigo</Button>
       </div>
+      <BlogAutomation onChange={load} />
       <div className="flex gap-3 flex-wrap">
         <Input placeholder="Buscar por título ou categoria" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-sm" />
         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as 'all' | 'draft' | 'published')} className="h-10 px-3 rounded-md border border-input bg-background text-sm">
