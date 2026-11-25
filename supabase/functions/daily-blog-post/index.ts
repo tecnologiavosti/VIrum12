@@ -66,7 +66,18 @@ Deno.serve(async req=>{
  try{
   const token=req.headers.get('x-blog-cron-secret');const secret=env('BLOG_AUTOMATION_CRON_SECRET');
   const scheduled=!!token&&!!secret&&secret.length>=32&&await equal(token,secret);
-  if(token&&!scheduled)return reply({error:'Agendador não autorizado.'},401);
+  if(token&&!scheduled)return reply({
+   error:'Agendador não autorizado.',
+   diagnostic:{
+    version:'cron-auth-v2',
+    runtime_project:new URL(env('SUPABASE_URL')!).hostname,
+    secret_configured:!!secret,
+    secret_length:secret?.length || 0,
+    received_length:token.length,
+    secret_has_outer_whitespace:!!secret && secret!==secret.trim(),
+    same_after_trim:!!secret && await equal(token.trim(),secret.trim()),
+   },
+  },401);
   const body=await req.json().catch(()=>({}));
   if(!['generate','review','status'].includes(body.action || 'generate'))return reply({error:'Ação inválida.'},400);
   if(!scheduled){
